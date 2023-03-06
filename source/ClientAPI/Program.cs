@@ -1,4 +1,19 @@
+using ClientAPI;
+
+var myAllowSpecificOrigins = "_myAllowSpecificOrigins";
+
 var builder = WebApplication.CreateBuilder(args);
+Options settings = ReadOptions(builder);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: myAllowSpecificOrigins,
+        policy =>
+        {            
+            policy.WithOrigins(settings.AllowedOrigins.Split(","));
+            policy.WithMethods(settings.AllowedMethods.Split(","));
+        });
+});
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -15,22 +30,26 @@ if (app.Environment.IsDevelopment())
 }
 
 //app.UseHttpsRedirection();
+app.UseCors(myAllowSpecificOrigins);
 
 app.MapGet("/ip", (HttpContext context) =>
 {
     string? ip = string.Empty;
-    string headerValue = builder.Configuration["header-key"];
 
-    if (string.IsNullOrEmpty(headerValue))
+    if (string.IsNullOrEmpty(settings.HeaderKey))
     {
         ip = context.Connection.RemoteIpAddress?.ToString();
     }
     else
     {
-        Microsoft.Extensions.Primitives.StringValues tempValue;
-        context.Request.Headers.TryGetValue(headerValue, out tempValue);
+        context.Request.Headers.TryGetValue(settings.HeaderKey, out Microsoft.Extensions.Primitives.StringValues tempValue);
 
         ip = tempValue.ToString();
+    }
+
+    if(settings.FirstIpOnly && !string.IsNullOrEmpty(ip))
+    {
+        ip = ip.Split(',')[0];
     }
 
     return (!string.IsNullOrEmpty(ip))? ip: "cannot get ip";
@@ -38,3 +57,14 @@ app.MapGet("/ip", (HttpContext context) =>
 .WithName("GetIP");
 
 app.Run();
+
+static Options ReadOptions(WebApplicationBuilder builder)
+{
+    return new Options()
+    {
+        HeaderKey = builder.Configuration["headerKey"],
+        AllowedOrigins = builder.Configuration["allowedOrigins"],
+        AllowedMethods = builder.Configuration["allowedMethods"],
+        FirstIpOnly = builder.Configuration.GetValue<bool>("firstIpOnly", false)
+    };
+}
