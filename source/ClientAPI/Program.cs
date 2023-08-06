@@ -1,4 +1,5 @@
 using ClientAPI;
+using System.Text;
 
 var myAllowSpecificOrigins = "_myAllowSpecificOrigins";
 
@@ -9,7 +10,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: myAllowSpecificOrigins,
         policy =>
-        {            
+        {
             policy.WithOrigins(settings.AllowedOrigins.Split(","));
             policy.WithMethods(settings.AllowedMethods.Split(","));
         });
@@ -34,25 +35,44 @@ app.UseCors(myAllowSpecificOrigins);
 
 app.MapGet("/ip", (HttpContext context) =>
 {
+    StringBuilder details = new();
+    details.AppendLine(settings.ToString());
+
     string? ip = string.Empty;
 
     if (string.IsNullOrEmpty(settings.HeaderKey))
     {
         ip = context.Connection.RemoteIpAddress?.ToString();
+
+        details.AppendLine($"RemoteIpAddress: {ip}");
     }
     else
     {
-        context.Request.Headers.TryGetValue(settings.HeaderKey, out Microsoft.Extensions.Primitives.StringValues tempValue);
+        bool succeeded = context.Request.Headers.TryGetValue(settings.HeaderKey, out Microsoft.Extensions.Primitives.StringValues tempValue);
 
-        ip = tempValue.ToString();
+        if (succeeded)
+        {
+            ip = tempValue.ToString();
+            details.AppendLine($"ip from {settings.HeaderKey} is {ip}");
+            details.AppendLine($"succeeded to read header {settings.HeaderKey}");
+        }
+        else
+        {
+            details.AppendLine($"failed to read header {settings.HeaderKey}");
+        }
     }
 
-    if(settings.FirstIpOnly && !string.IsNullOrEmpty(ip))
+    if (settings.FirstIpOnly && !string.IsNullOrEmpty(ip))
     {
         ip = ip.Split(',')[0];
+
+        details.AppendLine($"first ip is {ip}");
     }
 
-    return (!string.IsNullOrEmpty(ip))? ip: "cannot get ip";
+    string result = (!string.IsNullOrEmpty(ip)) ? ip : "cannot get ip";
+    details.AppendLine($"result: {result}");
+
+    return (context.Request.Query["details"] == "1") ? details.ToString() : result;
 })
 .WithName("GetIP");
 
